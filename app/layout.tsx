@@ -8,6 +8,7 @@ export const metadata: Metadata = {
     generator: 'v0.dev'
 }
 
+// Simplified layout to avoid blocking the build
 export default function RootLayout({
   children,
 }: {

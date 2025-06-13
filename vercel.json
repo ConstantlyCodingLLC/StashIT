@@ -1,6 +1,6 @@
 {
-  "buildCommand": "npm run build",
-  "installCommand": "npm ci --force --ignore-scripts",
+  "buildCommand": "next build",
+  "installCommand": "npm ci --no-audit",
   "framework": "nextjs",
   "outputDirectory": ".next",
   "builds": [
@@ -16,11 +16,13 @@
     }
   ],
   "env": {
-    "NODE_ENV": "production"
+    "NODE_ENV": "production",
+    "NEXT_TELEMETRY_DISABLED": "1"
   },
   "build": {
     "env": {
-      "NODE_ENV": "production"
+      "NODE_ENV": "production",
+      "NEXT_TELEMETRY_DISABLED": "1"
     }
   },
   "functions": {
