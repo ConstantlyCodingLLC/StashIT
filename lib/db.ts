@@ -14,6 +14,9 @@ if (!pool) {
   })
 }
 
+// Export the pool as db for compatibility
+export const db = pool
+
 // Helper function to execute SQL queries
 export async function query(query: string, values: any[] = []) {
   try {
