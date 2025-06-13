@@ -32,3 +32,8 @@ export async function transaction(queries: { query: string; values: any[] }[]) {
     throw error
   }
 }
+
+// Mock prisma client for compatibility
+export const prisma = {
+  // Add any necessary mock methods here if needed
+}
