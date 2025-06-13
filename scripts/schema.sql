@@ -1,238 +1,209 @@
--- Drop tables if they exist (in reverse order of dependencies)
-DROP TABLE IF EXISTS audit_logs;
-DROP TABLE IF EXISTS inventory_transactions;
-DROP TABLE IF EXISTS purchase_order_items;
-DROP TABLE IF EXISTS purchase_orders;
-DROP TABLE IF EXISTS invoice_items;
-DROP TABLE IF EXISTS invoices;
-DROP TABLE IF EXISTS devices;
-DROP TABLE IF EXISTS inventory_items;
-DROP TABLE IF EXISTS categories;
-DROP TABLE IF EXISTS suppliers;
-DROP TABLE IF EXISTS business_settings;
-DROP TABLE IF EXISTS users;
-DROP TABLE IF EXISTS businesses;
+-- Create tables for the inventory management system
 
--- Create businesses table
-CREATE TABLE businesses (
-  id VARCHAR(255) PRIMARY KEY,
+-- Businesses table
+CREATE TABLE IF NOT EXISTS businesses (
+  id UUID PRIMARY KEY,
   name VARCHAR(255) NOT NULL,
-  business_type VARCHAR(255) NOT NULL,
+  business_type VARCHAR(100),
   address TEXT,
-  currency VARCHAR(3) DEFAULT 'USD',
-  tax_rate DECIMAL(5, 2) DEFAULT 0,
-  fiscal_year_start VARCHAR(10) DEFAULT 'jan',
+  phone VARCHAR(50),
+  email VARCHAR(255),
+  currency VARCHAR(10) DEFAULT 'USD',
+  tax_rate DECIMAL(5,2) DEFAULT 0,
+  fiscal_year_start DATE,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
--- Create business_settings table
-CREATE TABLE business_settings (
-  id VARCHAR(255) PRIMARY KEY,
+-- Business settings table
+CREATE TABLE IF NOT EXISTS business_settings (
+  id UUID PRIMARY KEY,
+  business_id UUID NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
   low_stock_alerts BOOLEAN DEFAULT TRUE,
   auto_order_suggestions BOOLEAN DEFAULT TRUE,
   low_stock_threshold INTEGER DEFAULT 10,
-  business_id VARCHAR(255) NOT NULL,
-  FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
--- Create users table
-CREATE TABLE users (
-  id VARCHAR(255) PRIMARY KEY,
+-- Users table
+CREATE TABLE IF NOT EXISTS users (
+  id UUID PRIMARY KEY,
+  business_id UUID NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
   name VARCHAR(255) NOT NULL,
   email VARCHAR(255) NOT NULL,
   password VARCHAR(255) NOT NULL,
   role VARCHAR(50) NOT NULL DEFAULT 'user',
-  business_id VARCHAR(255) NOT NULL,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE,
-  UNIQUE (email, business_id)
+  UNIQUE(email, business_id)
 );
 
--- Create categories table
-CREATE TABLE categories (
-  id VARCHAR(255) PRIMARY KEY,
+-- Categories table
+CREATE TABLE IF NOT EXISTS categories (
+  id UUID PRIMARY KEY,
+  business_id UUID NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
   name VARCHAR(255) NOT NULL,
   description TEXT,
-  business_id VARCHAR(255) NOT NULL,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-  updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE,
-  UNIQUE (name, business_id)
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
--- Create suppliers table
-CREATE TABLE suppliers (
-  id VARCHAR(255) PRIMARY KEY,
+-- Suppliers table
+CREATE TABLE IF NOT EXISTS suppliers (
+  id UUID PRIMARY KEY,
+  business_id UUID NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
   name VARCHAR(255) NOT NULL,
   contact_name VARCHAR(255),
-  contact_title VARCHAR(255),
   email VARCHAR(255),
   phone VARCHAR(50),
   address TEXT,
-  website VARCHAR(255),
-  tax_id VARCHAR(100),
-  payment_terms VARCHAR(255),
+  payment_terms VARCHAR(100),
   notes TEXT,
-  status VARCHAR(50) DEFAULT 'active',
-  business_id VARCHAR(255) NOT NULL,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-  updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
--- Create inventory_items table
-CREATE TABLE inventory_items (
-  id VARCHAR(255) PRIMARY KEY,
+-- Inventory items table
+CREATE TABLE IF NOT EXISTS inventory_items (
+  id UUID PRIMARY KEY,
+  business_id UUID NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
   name VARCHAR(255) NOT NULL,
   sku VARCHAR(100) NOT NULL,
   description TEXT,
   quantity INTEGER NOT NULL DEFAULT 0,
-  min_quantity INTEGER DEFAULT 0,
-  cost_price DECIMAL(10, 2),
-  selling_price DECIMAL(10, 2),
+  min_quantity INTEGER NOT NULL DEFAULT 0,
+  cost_price DECIMAL(10,2),
+  selling_price DECIMAL(10,2),
   location VARCHAR(255),
-  business_id VARCHAR(255) NOT NULL,
-  category_id VARCHAR(255),
-  supplier_id VARCHAR(255),
+  category_id UUID REFERENCES categories(id) ON DELETE SET NULL,
+  supplier_id UUID REFERENCES suppliers(id) ON DELETE SET NULL,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE,
-  FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE SET NULL,
-  FOREIGN KEY (supplier_id) REFERENCES suppliers(id) ON DELETE SET NULL,
-  UNIQUE (sku, business_id)
+  UNIQUE(sku, business_id)
 );
 
--- Create devices table
-CREATE TABLE devices (
-  id VARCHAR(255) PRIMARY KEY,
+-- Devices table
+CREATE TABLE IF NOT EXISTS devices (
+  id UUID PRIMARY KEY,
+  business_id UUID NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
   name VARCHAR(255) NOT NULL,
-  device_type VARCHAR(100) NOT NULL,
-  manufacturer VARCHAR(255),
-  model VARCHAR(255),
   serial_number VARCHAR(255),
-  sku VARCHAR(100),
-  purchase_date TIMESTAMP WITH TIME ZONE,
-  warranty_expiry TIMESTAMP WITH TIME ZONE,
-  assigned_to VARCHAR(255),
-  status VARCHAR(50) DEFAULT 'available',
+  model VARCHAR(255),
+  status VARCHAR(50) NOT NULL DEFAULT 'available',
+  assigned_to UUID REFERENCES users(id) ON DELETE SET NULL,
   notes TEXT,
-  business_id VARCHAR(255) NOT NULL,
+  purchase_date DATE,
+  warranty_expiry DATE,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-  updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE,
-  UNIQUE (serial_number, business_id)
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
--- Create purchase_orders table
-CREATE TABLE purchase_orders (
-  id VARCHAR(255) PRIMARY KEY,
-  po_number VARCHAR(100) NOT NULL,
-  date TIMESTAMP WITH TIME ZONE NOT NULL,
-  expected_delivery TIMESTAMP WITH TIME ZONE,
-  payment_terms VARCHAR(255),
-  shipping_address TEXT,
+-- Purchase orders table
+CREATE TABLE IF NOT EXISTS purchase_orders (
+  id UUID PRIMARY KEY,
+  business_id UUID NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
+  supplier_id UUID REFERENCES suppliers(id) ON DELETE SET NULL,
+  order_number VARCHAR(100) NOT NULL,
+  status VARCHAR(50) NOT NULL DEFAULT 'draft',
+  order_date DATE NOT NULL,
+  expected_delivery_date DATE,
+  delivery_date DATE,
+  total_amount DECIMAL(10,2) NOT NULL DEFAULT 0,
   notes TEXT,
-  status VARCHAR(50) DEFAULT 'draft',
-  subtotal DECIMAL(10, 2) NOT NULL,
-  tax DECIMAL(10, 2) NOT NULL,
-  total DECIMAL(10, 2) NOT NULL,
-  business_id VARCHAR(255) NOT NULL,
-  supplier_id VARCHAR(255) NOT NULL,
+  created_by UUID REFERENCES users(id) ON DELETE SET NULL,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-  updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE,
-  FOREIGN KEY (supplier_id) REFERENCES suppliers(id) ON DELETE CASCADE,
-  UNIQUE (po_number, business_id)
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
--- Create purchase_order_items table
-CREATE TABLE purchase_order_items (
-  id VARCHAR(255) PRIMARY KEY,
+-- Purchase order items table
+CREATE TABLE IF NOT EXISTS purchase_order_items (
+  id UUID PRIMARY KEY,
+  purchase_order_id UUID NOT NULL REFERENCES purchase_orders(id) ON DELETE CASCADE,
+  item_id UUID REFERENCES inventory_items(id) ON DELETE SET NULL,
   quantity INTEGER NOT NULL,
-  unit_price DECIMAL(10, 2) NOT NULL,
-  total DECIMAL(10, 2) NOT NULL,
-  description TEXT,
-  purchase_order_id VARCHAR(255) NOT NULL,
-  item_id VARCHAR(255) NOT NULL,
-  FOREIGN KEY (purchase_order_id) REFERENCES purchase_orders(id) ON DELETE CASCADE,
-  FOREIGN KEY (item_id) REFERENCES inventory_items(id) ON DELETE CASCADE
+  unit_price DECIMAL(10,2) NOT NULL,
+  total_price DECIMAL(10,2) NOT NULL,
+  received_quantity INTEGER DEFAULT 0,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
--- Create invoices table
-CREATE TABLE invoices (
-  id VARCHAR(255) PRIMARY KEY,
+-- Inventory transactions table
+CREATE TABLE IF NOT EXISTS inventory_transactions (
+  id UUID PRIMARY KEY,
+  business_id UUID NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
+  item_id UUID REFERENCES inventory_items(id) ON DELETE SET NULL,
+  quantity INTEGER NOT NULL,
+  type VARCHAR(50) NOT NULL,
+  reference_id UUID,
+  reference_type VARCHAR(50),
+  notes TEXT,
+  user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Invoices table
+CREATE TABLE IF NOT EXISTS invoices (
+  id UUID PRIMARY KEY,
+  business_id UUID NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
   invoice_number VARCHAR(100) NOT NULL,
   customer_name VARCHAR(255) NOT NULL,
-  date TIMESTAMP WITH TIME ZONE NOT NULL,
-  due_date TIMESTAMP WITH TIME ZONE NOT NULL,
-  status VARCHAR(50) DEFAULT 'draft',
-  subtotal DECIMAL(10, 2) NOT NULL,
-  tax DECIMAL(10, 2) NOT NULL,
-  total DECIMAL(10, 2) NOT NULL,
+  customer_email VARCHAR(255),
+  customer_address TEXT,
+  issue_date DATE NOT NULL,
+  due_date DATE NOT NULL,
+  status VARCHAR(50) NOT NULL DEFAULT 'draft',
+  subtotal DECIMAL(10,2) NOT NULL,
+  tax_amount DECIMAL(10,2) NOT NULL DEFAULT 0,
+  total_amount DECIMAL(10,2) NOT NULL,
   notes TEXT,
-  business_id VARCHAR(255) NOT NULL,
+  created_by UUID REFERENCES users(id) ON DELETE SET NULL,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-  updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE,
-  UNIQUE (invoice_number, business_id)
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
--- Create invoice_items table
-CREATE TABLE invoice_items (
-  id VARCHAR(255) PRIMARY KEY,
+-- Invoice items table
+CREATE TABLE IF NOT EXISTS invoice_items (
+  id UUID PRIMARY KEY,
+  invoice_id UUID NOT NULL REFERENCES invoices(id) ON DELETE CASCADE,
+  item_id UUID REFERENCES inventory_items(id) ON DELETE SET NULL,
+  description TEXT NOT NULL,
   quantity INTEGER NOT NULL,
-  unit_price DECIMAL(10, 2) NOT NULL,
-  total DECIMAL(10, 2) NOT NULL,
-  description TEXT,
-  invoice_id VARCHAR(255) NOT NULL,
-  item_id VARCHAR(255) NOT NULL,
-  FOREIGN KEY (invoice_id) REFERENCES invoices(id) ON DELETE CASCADE,
-  FOREIGN KEY (item_id) REFERENCES inventory_items(id) ON DELETE CASCADE
-);
-
--- Create inventory_transactions table
-CREATE TABLE inventory_transactions (
-  id VARCHAR(255) PRIMARY KEY,
-  type VARCHAR(50) NOT NULL,
-  quantity INTEGER NOT NULL,
-  notes TEXT,
-  business_id VARCHAR(255) NOT NULL,
-  user_id VARCHAR(255) NOT NULL,
-  item_id VARCHAR(255),
-  device_id VARCHAR(255),
-  purchase_order_id VARCHAR(255),
+  unit_price DECIMAL(10,2) NOT NULL,
+  total_price DECIMAL(10,2) NOT NULL,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE,
-  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-  FOREIGN KEY (item_id) REFERENCES inventory_items(id) ON DELETE SET NULL,
-  FOREIGN KEY (device_id) REFERENCES devices(id) ON DELETE SET NULL,
-  FOREIGN KEY (purchase_order_id) REFERENCES purchase_orders(id) ON DELETE SET NULL
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
--- Create audit_logs table
-CREATE TABLE audit_logs (
-  id VARCHAR(255) PRIMARY KEY,
+-- Audit logs table
+CREATE TABLE IF NOT EXISTS audit_logs (
+  id UUID PRIMARY KEY,
+  business_id UUID NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
+  user_id UUID REFERENCES users(id) ON DELETE SET NULL,
   action VARCHAR(50) NOT NULL,
   item_type VARCHAR(50) NOT NULL,
-  item_id VARCHAR(255) NOT NULL,
+  item_id UUID NOT NULL,
   details TEXT,
   ip_address VARCHAR(50),
   device_info TEXT,
-  business_id VARCHAR(255) NOT NULL,
-  user_id VARCHAR(255) NOT NULL,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE,
-  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Create indexes for better performance
-CREATE INDEX idx_inventory_items_business_id ON inventory_items(business_id);
-CREATE INDEX idx_inventory_items_category_id ON inventory_items(category_id);
-CREATE INDEX idx_inventory_items_supplier_id ON inventory_items(supplier_id);
-CREATE INDEX idx_users_business_id ON users(business_id);
-CREATE INDEX idx_audit_logs_business_id ON audit_logs(business_id);
-CREATE INDEX idx_inventory_transactions_business_id ON inventory_transactions(business_id);
-CREATE INDEX idx_purchase_orders_business_id ON purchase_orders(business_id);
-CREATE INDEX idx_invoices_business_id ON invoices(business_id);
+CREATE INDEX IF NOT EXISTS idx_inventory_items_business_id ON inventory_items(business_id);
+CREATE INDEX IF NOT EXISTS idx_inventory_items_category_id ON inventory_items(category_id);
+CREATE INDEX IF NOT EXISTS idx_inventory_items_supplier_id ON inventory_items(supplier_id);
+CREATE INDEX IF NOT EXISTS idx_users_business_id ON users(business_id);
+CREATE INDEX IF NOT EXISTS idx_categories_business_id ON categories(business_id);
+CREATE INDEX IF NOT EXISTS idx_suppliers_business_id ON suppliers(business_id);
+CREATE INDEX IF NOT EXISTS idx_purchase_orders_business_id ON purchase_orders(business_id);
+CREATE INDEX IF NOT EXISTS idx_purchase_orders_supplier_id ON purchase_orders(supplier_id);
+CREATE INDEX IF NOT EXISTS idx_purchase_order_items_purchase_order_id ON purchase_order_items(purchase_order_id);
+CREATE INDEX IF NOT EXISTS idx_inventory_transactions_business_id ON inventory_transactions(business_id);
+CREATE INDEX IF NOT EXISTS idx_inventory_transactions_item_id ON inventory_transactions(item_id);
+CREATE INDEX IF NOT EXISTS idx_invoices_business_id ON invoices(business_id);
+CREATE INDEX IF NOT EXISTS idx_invoice_items_invoice_id ON invoice_items(invoice_id);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_business_id ON audit_logs(business_id);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_user_id ON audit_logs(user_id);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_item_type_item_id ON audit_logs(item_type, item_id);

@@ -1,12 +1,9 @@
 "use server"
 
 import { hash } from "bcryptjs"
-import { prisma } from "@/lib/db"
-import { revalidatePath } from "next/cache"
 import { sql } from "@/lib/db"
-import { getServerSession } from "next-auth"
-import { authOptions } from "@/lib/auth"
-import { createAuditLog } from "./audit"
+import { revalidatePath } from "next/cache"
+import { v4 as uuidv4 } from "uuid"
 
 export interface BusinessSetupData {
   businessName: string
@@ -22,47 +19,58 @@ export interface BusinessSetupData {
 
 export async function setupBusiness(data: BusinessSetupData) {
   try {
+    const businessId = uuidv4()
+    const userId = uuidv4()
+    const now = new Date().toISOString()
+
     // Create the business
-    const business = await prisma.business.create({
-      data: {
-        name: data.businessName,
-        businessType: data.businessType,
-        address: data.address,
-        currency: data.currency,
-        taxRate: data.taxRate,
-        fiscalYearStart: data.fiscalYearStart,
-        settings: {
-          create: {
-            lowStockAlerts: true,
-            autoOrderSuggestions: true,
-            lowStockThreshold: 10,
-          },
-        },
-      },
-    })
+    await sql`
+      INSERT INTO businesses (
+        id, name, business_type, address, currency, tax_rate, fiscal_year_start, created_at, updated_at
+      )
+      VALUES (
+        ${businessId}, ${data.businessName}, ${data.businessType}, ${data.address}, 
+        ${data.currency}, ${data.taxRate}, ${data.fiscalYearStart}, ${now}, ${now}
+      )
+    `
+
+    // Create business settings
+    await sql`
+      INSERT INTO business_settings (
+        id, business_id, low_stock_alerts, auto_order_suggestions, low_stock_threshold, created_at, updated_at
+      )
+      VALUES (
+        ${uuidv4()}, ${businessId}, true, true, 10, ${now}, ${now}
+      )
+    `
 
     // Create the admin user
     const hashedPassword = await hash(data.adminPassword, 10)
-    await prisma.user.create({
-      data: {
-        name: data.adminName,
-        email: data.adminEmail,
-        password: hashedPassword,
-        role: "admin",
-        businessId: business.id,
-      },
-    })
+    await sql`
+      INSERT INTO users (
+        id, name, email, password, role, business_id, created_at, updated_at
+      )
+      VALUES (
+        ${userId}, ${data.adminName}, ${data.adminEmail}, ${hashedPassword}, 
+        'admin', ${businessId}, ${now}, ${now}
+      )
+    `
 
     // Create default categories
     const defaultCategories = ["Office Supplies", "Electronics", "Packaging", "Furniture"]
-    await prisma.category.createMany({
-      data: defaultCategories.map((name) => ({
-        name,
-        businessId: business.id,
-      })),
-    })
 
-    return { success: true, businessId: business.id }
+    for (const category of defaultCategories) {
+      await sql`
+        INSERT INTO categories (
+          id, name, business_id, created_at, updated_at
+        )
+        VALUES (
+          ${uuidv4()}, ${category}, ${businessId}, ${now}, ${now}
+        )
+      `
+    }
+
+    return { success: true, businessId }
   } catch (error) {
     console.error("Error setting up business:", error)
     return { success: false, error: "Failed to set up business" }
@@ -72,183 +80,149 @@ export async function setupBusiness(data: BusinessSetupData) {
 export async function clearBusinessData(businessId: string) {
   try {
     // Delete all business data in the correct order to respect foreign key constraints
-    await prisma.$transaction([
-      prisma.auditLog.deleteMany({ where: { businessId } }),
-      prisma.invoiceItem.deleteMany({
-        where: { invoice: { businessId } },
-      }),
-      prisma.invoice.deleteMany({ where: { businessId } }),
-      prisma.purchaseOrderItem.deleteMany({
-        where: { purchaseOrder: { businessId } },
-      }),
-      prisma.transaction.deleteMany({ where: { businessId } }),
-      prisma.purchaseOrder.deleteMany({ where: { businessId } }),
-      prisma.device.deleteMany({ where: { businessId } }),
-      prisma.inventoryItem.deleteMany({ where: { businessId } }),
-      prisma.supplier.deleteMany({ where: { businessId } }),
-      prisma.category.deleteMany({ where: { businessId } }),
-      prisma.businessSettings.delete({ where: { businessId } }),
-      // Don't delete users - just keep the admin
-      prisma.business.delete({ where: { id: businessId } }),
-    ])
+    await sql`BEGIN`
+
+    // Delete audit logs
+    await sql`DELETE FROM audit_logs WHERE business_id = ${businessId}`
+
+    // Delete invoice items
+    await sql`
+      DELETE FROM invoice_items 
+      WHERE invoice_id IN (
+        SELECT id FROM invoices WHERE business_id = ${businessId}
+      )
+    `
+
+    // Delete invoices
+    await sql`DELETE FROM invoices WHERE business_id = ${businessId}`
+
+    // Delete purchase order items
+    await sql`
+      DELETE FROM purchase_order_items 
+      WHERE purchase_order_id IN (
+        SELECT id FROM purchase_orders WHERE business_id = ${businessId}
+      )
+    `
+
+    // Delete transactions
+    await sql`DELETE FROM inventory_transactions WHERE business_id = ${businessId}`
+
+    // Delete purchase orders
+    await sql`DELETE FROM purchase_orders WHERE business_id = ${businessId}`
+
+    // Delete devices
+    await sql`DELETE FROM devices WHERE business_id = ${businessId}`
+
+    // Delete inventory items
+    await sql`DELETE FROM inventory_items WHERE business_id = ${businessId}`
+
+    // Delete suppliers
+    await sql`DELETE FROM suppliers WHERE business_id = ${businessId}`
+
+    // Delete categories
+    await sql`DELETE FROM categories WHERE business_id = ${businessId}`
+
+    // Delete business settings
+    await sql`DELETE FROM business_settings WHERE business_id = ${businessId}`
+
+    // Delete business
+    await sql`DELETE FROM businesses WHERE id = ${businessId}`
+
+    await sql`COMMIT`
 
     return { success: true }
   } catch (error) {
+    await sql`ROLLBACK`
     console.error("Error clearing business data:", error)
     return { success: false, error: "Failed to clear business data" }
   }
 }
 
-export async function updateBusinessSettings(data: {
-  name?: string
-  businessType?: string
-  address?: string
-  currency?: string
-  taxRate?: number
-  fiscalYearStart?: string
-  lowStockAlerts?: boolean
-  autoOrderSuggestions?: boolean
-  lowStockThreshold?: number
-}) {
+export async function updateBusinessSettings(
+  businessId: string,
+  data: {
+    name?: string
+    address?: string
+    phone?: string
+    email?: string
+    lowStockAlerts?: boolean
+    autoOrderSuggestions?: boolean
+    lowStockThreshold?: number
+  },
+) {
   try {
-    const session = await getServerSession(authOptions)
-    if (!session) {
-      return { success: false, error: "Unauthorized" }
-    }
+    // Update business info
+    if (data.name || data.address || data.phone || data.email) {
+      const updates = []
+      const values = [businessId]
+      let paramIndex = 2
 
-    // Check if user has admin role
-    if (session.user.role !== "admin") {
-      return { success: false, error: "Only admins can update business settings" }
-    }
+      if (data.name) {
+        updates.push(`name = $${paramIndex++}`)
+        values.push(data.name)
+      }
+      if (data.address) {
+        updates.push(`address = $${paramIndex++}`)
+        values.push(data.address)
+      }
+      if (data.phone) {
+        updates.push(`phone = $${paramIndex++}`)
+        values.push(data.phone)
+      }
+      if (data.email) {
+        updates.push(`email = $${paramIndex++}`)
+        values.push(data.email)
+      }
 
-    const businessId = session.user.businessId
-    const now = new Date().toISOString()
+      const now = new Date().toISOString()
+      updates.push(`updated_at = $${paramIndex++}`)
+      values.push(now)
 
-    // Update business details
-    const businessUpdates = []
-    const businessValues = [businessId]
-    let paramIndex = 2
-
-    if (data.name !== undefined) {
-      businessUpdates.push(`name = $${paramIndex++}`)
-      businessValues.push(data.name)
-    }
-    if (data.businessType !== undefined) {
-      businessUpdates.push(`business_type = $${paramIndex++}`)
-      businessValues.push(data.businessType)
-    }
-    if (data.address !== undefined) {
-      businessUpdates.push(`address = $${paramIndex++}`)
-      businessValues.push(data.address)
-    }
-    if (data.currency !== undefined) {
-      businessUpdates.push(`currency = $${paramIndex++}`)
-      businessValues.push(data.currency)
-    }
-    if (data.taxRate !== undefined) {
-      businessUpdates.push(`tax_rate = $${paramIndex++}`)
-      businessValues.push(data.taxRate)
-    }
-    if (data.fiscalYearStart !== undefined) {
-      businessUpdates.push(`fiscal_year_start = $${paramIndex++}`)
-      businessValues.push(data.fiscalYearStart)
-    }
-
-    // Add updated timestamp
-    businessUpdates.push(`updated_at = $${paramIndex++}`)
-    businessValues.push(now)
-
-    if (businessUpdates.length > 1) {
-      // More than just the timestamp update
-      const businessUpdateQuery = `
+      const updateQuery = `
         UPDATE businesses
-        SET ${businessUpdates.join(", ")}
+        SET ${updates.join(", ")}
         WHERE id = $1
-        RETURNING *
       `
 
-      await sql.query(businessUpdateQuery, businessValues)
+      await sql.query(updateQuery, values)
     }
 
     // Update business settings
-    const settingsUpdates = []
-    const settingsValues = [businessId]
-    paramIndex = 2
+    if (
+      data.lowStockAlerts !== undefined ||
+      data.autoOrderSuggestions !== undefined ||
+      data.lowStockThreshold !== undefined
+    ) {
+      const updates = []
+      const values = [businessId]
+      let paramIndex = 2
 
-    if (data.lowStockAlerts !== undefined) {
-      settingsUpdates.push(`low_stock_alerts = $${paramIndex++}`)
-      settingsValues.push(data.lowStockAlerts)
-    }
-    if (data.autoOrderSuggestions !== undefined) {
-      settingsUpdates.push(`auto_order_suggestions = $${paramIndex++}`)
-      settingsValues.push(data.autoOrderSuggestions)
-    }
-    if (data.lowStockThreshold !== undefined) {
-      settingsUpdates.push(`low_stock_threshold = $${paramIndex++}`)
-      settingsValues.push(data.lowStockThreshold)
-    }
+      if (data.lowStockAlerts !== undefined) {
+        updates.push(`low_stock_alerts = $${paramIndex++}`)
+        values.push(data.lowStockAlerts)
+      }
+      if (data.autoOrderSuggestions !== undefined) {
+        updates.push(`auto_order_suggestions = $${paramIndex++}`)
+        values.push(data.autoOrderSuggestions)
+      }
+      if (data.lowStockThreshold !== undefined) {
+        updates.push(`low_stock_threshold = $${paramIndex++}`)
+        values.push(data.lowStockThreshold)
+      }
 
-    if (settingsUpdates.length > 0) {
-      const settingsUpdateQuery = `
+      const updateQuery = `
         UPDATE business_settings
-        SET ${settingsUpdates.join(", ")}
+        SET ${updates.join(", ")}
         WHERE business_id = $1
-        RETURNING *
       `
 
-      await sql.query(settingsUpdateQuery, settingsValues)
+      await sql.query(updateQuery, values)
     }
-
-    // Create audit log
-    await createAuditLog({
-      action: "updated",
-      itemType: "business",
-      itemId: businessId,
-      details: JSON.stringify(data),
-    })
 
     revalidatePath("/settings")
     return { success: true }
   } catch (error) {
     console.error("Error updating business settings:", error)
     return { success: false, error: "Failed to update business settings" }
-  }
-}
-
-export async function getBusinessSettings() {
-  try {
-    const session = await getServerSession(authOptions)
-    if (!session) {
-      return { success: false, error: "Unauthorized" }
-    }
-
-    const businessId = session.user.businessId
-
-    // Get business and settings
-    const businessResult = await sql`
-      SELECT * FROM businesses
-      WHERE id = ${businessId}
-    `
-
-    const settingsResult = await sql`
-      SELECT * FROM business_settings
-      WHERE business_id = ${businessId}
-    `
-
-    if (businessResult.rows.length === 0) {
-      return { success: false, error: "Business not found" }
-    }
-
-    const business = businessResult.rows[0]
-    const settings = settingsResult.rows[0] || {}
-
-    return {
-      success: true,
-      business,
-      settings,
-    }
-  } catch (error) {
-    console.error("Error getting business settings:", error)
-    return { success: false, error: "Failed to get business settings" }
   }
 }

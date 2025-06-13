@@ -1,147 +1,148 @@
+// This script seeds the database with initial data
 const { sql } = require("@vercel/postgres")
 const { v4: uuidv4 } = require("uuid")
 const bcrypt = require("bcryptjs")
 
 async function seedDatabase() {
   try {
-    console.log("Starting database seed...")
+    console.log("Seeding database...")
 
-    // Check if business already exists
-    const checkBusiness = await sql`SELECT * FROM businesses WHERE name = 'Demo Business'`
-
-    if (checkBusiness.rows.length > 0) {
-      console.log("Seed data already exists. Skipping...")
-      return
-    }
-
-    // Create business
+    // Create a business
     const businessId = uuidv4()
     const now = new Date().toISOString()
 
     await sql`
       INSERT INTO businesses (
-        id, name, business_type, address, currency, tax_rate, 
-        fiscal_year_start, created_at, updated_at
+        id, name, business_type, address, currency, tax_rate, fiscal_year_start, created_at, updated_at
       )
       VALUES (
-        ${businessId}, 'Demo Business', 'retail', '123 Demo Street, Demo City',
-        'USD', 8, 'jan', ${now}, ${now}
+        ${businessId}, 'Demo Company', 'Retail', '123 Main St, Anytown, USA', 
+        'USD', 7.5, '2023-01-01', ${now}, ${now}
       )
     `
-
-    console.log(`Created business: Demo Business (${businessId})`)
 
     // Create business settings
-    const settingsId = uuidv4()
     await sql`
       INSERT INTO business_settings (
-        id, low_stock_alerts, auto_order_suggestions, low_stock_threshold, business_id
+        id, business_id, low_stock_alerts, auto_order_suggestions, low_stock_threshold, created_at, updated_at
       )
       VALUES (
-        ${settingsId}, true, true, 10, ${businessId}
+        ${uuidv4()}, ${businessId}, true, true, 10, ${now}, ${now}
       )
     `
 
-    console.log("Created business settings")
-
     // Create admin user
-    const adminId = uuidv4()
     const hashedPassword = await bcrypt.hash("password123", 10)
+    const userId = uuidv4()
 
     await sql`
       INSERT INTO users (
         id, name, email, password, role, business_id, created_at, updated_at
       )
       VALUES (
-        ${adminId}, 'Admin User', 'admin@example.com', ${hashedPassword},
+        ${userId}, 'Admin User', 'admin@example.com', ${hashedPassword}, 
         'admin', ${businessId}, ${now}, ${now}
       )
     `
 
-    console.log(`Created admin user: admin@example.com (${adminId})`)
-
     // Create categories
-    const categoryIds = []
-    const categories = ["Office Supplies", "Electronics", "Packaging", "Furniture"]
+    const categories = [
+      { name: "Office Supplies", description: "Paper, pens, and other office items" },
+      { name: "Electronics", description: "Computers, phones, and other electronic devices" },
+      { name: "Furniture", description: "Desks, chairs, and other furniture" },
+      { name: "Packaging", description: "Boxes, tape, and other packaging materials" },
+    ]
 
-    for (const categoryName of categories) {
+    const categoryIds = {}
+
+    for (const category of categories) {
       const categoryId = uuidv4()
-      categoryIds.push(categoryId)
+      categoryIds[category.name] = categoryId
 
       await sql`
         INSERT INTO categories (
-          id, name, business_id, created_at, updated_at
+          id, name, description, business_id, created_at, updated_at
         )
         VALUES (
-          ${categoryId}, ${categoryName}, ${businessId}, ${now}, ${now}
+          ${categoryId}, ${category.name}, ${category.description}, ${businessId}, ${now}, ${now}
         )
       `
     }
 
-    console.log(`Created ${categories.length} categories`)
-
     // Create suppliers
-    const supplierIds = []
     const suppliers = [
-      { name: "Acme Supplies", contactName: "John Doe", email: "john@acmesupplies.com", phone: "555-123-4567" },
-      { name: "TechWorld", contactName: "Jane Smith", email: "jane@techworld.com", phone: "555-987-6543" },
-      { name: "BoxCo Packaging", contactName: "Bob Johnson", email: "bob@boxco.com", phone: "555-456-7890" },
+      {
+        name: "Office Depot",
+        contactName: "John Smith",
+        email: "john@officedepot.example.com",
+        phone: "555-123-4567",
+        address: "456 Business Ave, Commerce City, USA",
+        paymentTerms: "Net 30",
+      },
+      {
+        name: "Tech Supplies Inc",
+        contactName: "Jane Doe",
+        email: "jane@techsupplies.example.com",
+        phone: "555-987-6543",
+        address: "789 Tech Blvd, Silicon Valley, USA",
+        paymentTerms: "Net 15",
+      },
     ]
+
+    const supplierIds = {}
 
     for (const supplier of suppliers) {
       const supplierId = uuidv4()
-      supplierIds.push(supplierId)
+      supplierIds[supplier.name] = supplierId
 
       await sql`
         INSERT INTO suppliers (
-          id, name, contact_name, email, phone, business_id, created_at, updated_at
+          id, name, contact_name, email, phone, address, payment_terms, business_id, created_at, updated_at
         )
         VALUES (
-          ${supplierId}, ${supplier.name}, ${supplier.contactName}, 
-          ${supplier.email}, ${supplier.phone}, ${businessId}, ${now}, ${now}
+          ${supplierId}, ${supplier.name}, ${supplier.contactName}, ${supplier.email},
+          ${supplier.phone}, ${supplier.address}, ${supplier.paymentTerms}, ${businessId}, ${now}, ${now}
         )
       `
     }
-
-    console.log(`Created ${suppliers.length} suppliers`)
 
     // Create inventory items
     const items = [
       {
-        name: "Office Paper",
-        sku: "OFF-PAP-001",
-        description: "Premium quality A4 office paper, 80gsm",
-        quantity: 124,
-        minQuantity: 20,
+        name: "Printer Paper",
+        sku: "PP-001",
+        description: "A4 printer paper, 500 sheets",
+        quantity: 50,
+        minQuantity: 10,
         costPrice: 3.99,
         sellingPrice: 5.99,
-        location: "Shelf A3",
-        categoryId: categoryIds[0],
-        supplierId: supplierIds[0],
+        location: "Shelf A1",
+        categoryName: "Office Supplies",
+        supplierName: "Office Depot",
       },
       {
-        name: "HDMI Cables",
-        sku: "ELE-CAB-002",
-        description: "6ft HDMI cables, high speed",
-        quantity: 87,
-        minQuantity: 15,
-        costPrice: 4.5,
-        sellingPrice: 12.99,
-        location: "Shelf B2",
-        categoryId: categoryIds[1],
-        supplierId: supplierIds[1],
+        name: "Ballpoint Pens",
+        sku: "BP-002",
+        description: "Blue ballpoint pens, box of 12",
+        quantity: 30,
+        minQuantity: 5,
+        costPrice: 2.49,
+        sellingPrice: 3.99,
+        location: "Shelf A2",
+        categoryName: "Office Supplies",
+        supplierName: "Office Depot",
       },
       {
-        name: "Shipping Boxes (Small)",
-        sku: "PKG-BOX-001",
-        description: "Small shipping boxes, 6x6x6 inches",
-        quantity: 65,
-        minQuantity: 30,
-        costPrice: 0.75,
-        sellingPrice: 1.5,
-        location: "Warehouse C",
-        categoryId: categoryIds[2],
-        supplierId: supplierIds[2],
+        name: "Laptop",
+        sku: "LT-003",
+        description: '15" Laptop, 8GB RAM, 256GB SSD',
+        quantity: 5,
+        minQuantity: 2,
+        costPrice: 599.99,
+        sellingPrice: 799.99,
+        location: "Shelf B1",
+        categoryName: "Electronics",
+        supplierName: "Tech Supplies Inc",
       },
     ]
 
@@ -150,80 +151,35 @@ async function seedDatabase() {
 
       await sql`
         INSERT INTO inventory_items (
-          id, name, sku, description, quantity, min_quantity, cost_price,
-          selling_price, location, business_id, category_id, supplier_id,
-          created_at, updated_at
+          id, name, sku, description, quantity, min_quantity, cost_price, selling_price,
+          location, category_id, supplier_id, business_id, created_at, updated_at
         )
         VALUES (
           ${itemId}, ${item.name}, ${item.sku}, ${item.description}, ${item.quantity},
           ${item.minQuantity}, ${item.costPrice}, ${item.sellingPrice}, ${item.location},
-          ${businessId}, ${item.categoryId}, ${item.supplierId}, ${now}, ${now}
+          ${categoryIds[item.categoryName]}, ${supplierIds[item.supplierName]}, ${businessId}, ${now}, ${now}
         )
       `
-    }
 
-    console.log(`Created ${items.length} inventory items`)
-
-    // Create devices
-    const devices = [
-      {
-        name: 'MacBook Pro 16"',
-        deviceType: "laptop",
-        manufacturer: "Apple",
-        model: "MacBook Pro",
-        serialNumber: "FVFXC2ABCD12",
-        sku: "DEV-LAP-001",
-        status: "deployed",
-        assignedTo: "Sarah Johnson",
-      },
-      {
-        name: 'iPad Pro 12.9"',
-        deviceType: "tablet",
-        manufacturer: "Apple",
-        model: "iPad Pro",
-        serialNumber: "DLXPF987ZYX",
-        sku: "DEV-TAB-001",
-        status: "deployed",
-        assignedTo: "Alex Rodriguez",
-      },
-    ]
-
-    for (const device of devices) {
-      const deviceId = uuidv4()
-
+      // Create initial inventory transaction
       await sql`
-        INSERT INTO devices (
-          id, name, device_type, manufacturer, model, serial_number, sku,
-          status, assigned_to, business_id, created_at, updated_at
+        INSERT INTO inventory_transactions (
+          id, business_id, item_id, quantity, type, notes, user_id, created_at
         )
         VALUES (
-          ${deviceId}, ${device.name}, ${device.deviceType}, ${device.manufacturer},
-          ${device.model}, ${device.serialNumber}, ${device.sku}, ${device.status},
-          ${device.assignedTo}, ${businessId}, ${now}, ${now}
+          ${uuidv4()}, ${businessId}, ${itemId}, ${item.quantity}, 'initial',
+          'Initial inventory setup', ${userId}, ${now}
         )
       `
     }
 
-    console.log(`Created ${devices.length} devices`)
-
     console.log("Database seeded successfully!")
+    console.log("Business ID:", businessId)
+    console.log("Admin user: admin@example.com / password123")
   } catch (error) {
     console.error("Error seeding database:", error)
-    throw error
+    process.exit(1)
   }
 }
 
-// Run the seed function if this script is executed directly
-if (require.main === module) {
-  seedDatabase()
-    .then(() => {
-      console.log("Seed completed")
-      process.exit(0)
-    })
-    .catch((error) => {
-      console.error("Seed failed:", error)
-      process.exit(1)
-    })
-}
-
-module.exports = seedDatabase
+seedDatabase()
