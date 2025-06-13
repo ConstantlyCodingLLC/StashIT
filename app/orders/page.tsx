@@ -3,78 +3,67 @@
 import { useState } from "react"
 import Link from "next/link"
 
-export default function InventoryPage() {
+export default function OrdersPage() {
   const [searchTerm, setSearchTerm] = useState("")
   const [filter, setFilter] = useState("all")
 
-  // Mock inventory data
-  const inventoryItems = [
+  // Mock orders data
+  const orders = [
     {
-      id: "1",
-      name: "Laptop Dell XPS 13",
-      category: "Electronics",
-      sku: "ELEC-001",
-      quantity: 15,
-      price: 1299.99,
-      status: "In Stock",
+      id: "PO-2023-001",
+      supplier: "Acme Electronics",
+      date: "2023-06-15",
+      total: 2499.99,
+      status: "Delivered",
     },
     {
-      id: "2",
-      name: "Office Chair",
-      category: "Furniture",
-      sku: "FURN-001",
-      quantity: 5,
-      price: 199.99,
-      status: "Low Stock",
+      id: "PO-2023-002",
+      supplier: "Office Furniture Co.",
+      date: "2023-06-20",
+      total: 1299.5,
+      status: "Processing",
     },
     {
-      id: "3",
-      name: "Wireless Mouse",
-      category: "Electronics",
-      sku: "ELEC-002",
-      quantity: 30,
-      price: 24.99,
-      status: "In Stock",
+      id: "PO-2023-003",
+      supplier: "Tech Supplies Inc.",
+      date: "2023-06-25",
+      total: 899.75,
+      status: "Pending",
     },
     {
-      id: "4",
-      name: "Desk Lamp",
-      category: "Office Supplies",
-      sku: "OFF-001",
-      quantity: 12,
-      price: 34.99,
-      status: "In Stock",
+      id: "PO-2023-004",
+      supplier: "Global Imports",
+      date: "2023-06-28",
+      total: 3499.99,
+      status: "Delivered",
     },
     {
-      id: "5",
-      name: "Printer Paper",
-      category: "Office Supplies",
-      sku: "OFF-002",
-      quantity: 3,
-      price: 9.99,
-      status: "Low Stock",
+      id: "PO-2023-005",
+      supplier: "Quality Products Ltd.",
+      date: "2023-07-01",
+      total: 1799.5,
+      status: "Processing",
     },
   ]
 
-  // Filter and search functionality
-  const filteredItems = inventoryItems.filter((item) => {
+  // Filter orders based on search term and status filter
+  const filteredOrders = orders.filter((order) => {
     const matchesSearch =
-      item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      item.sku.toLowerCase().includes(searchTerm.toLowerCase())
+      order.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      order.supplier.toLowerCase().includes(searchTerm.toLowerCase())
 
     if (filter === "all") return matchesSearch
-    if (filter === "low-stock") return matchesSearch && item.status === "Low Stock"
-    if (filter === "in-stock") return matchesSearch && item.status === "In Stock"
-
-    return matchesSearch
+    return matchesSearch && order.status.toLowerCase() === filter.toLowerCase()
   })
 
   return (
     <div>
       <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-semibold text-gray-900">Inventory</h1>
-        <Link href="/inventory/add">
-          <button className="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded">Add Item</button>
+        <h1 className="text-2xl font-semibold text-gray-900">Purchase Orders</h1>
+        <Link href="/orders/create">
+          <button className="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded">
+            Create Order
+          </button>
         </Link>
       </div>
 
@@ -94,7 +83,7 @@ export default function InventoryPage() {
             <input
               type="text"
               className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md leading-5 bg-white placeholder-gray-500 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-              placeholder="Search by name or SKU"
+              placeholder="Search orders"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
             />
@@ -105,9 +94,10 @@ export default function InventoryPage() {
               value={filter}
               onChange={(e) => setFilter(e.target.value)}
             >
-              <option value="all">All Items</option>
-              <option value="in-stock">In Stock</option>
-              <option value="low-stock">Low Stock</option>
+              <option value="all">All Orders</option>
+              <option value="pending">Pending</option>
+              <option value="processing">Processing</option>
+              <option value="delivered">Delivered</option>
             </select>
           </div>
         </div>
@@ -116,16 +106,15 @@ export default function InventoryPage() {
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Category
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">SKU</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Quantity
+                  Order ID
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Price
+                  Supplier
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Total
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Status
@@ -136,37 +125,38 @@ export default function InventoryPage() {
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {filteredItems.map((item) => (
-                <tr key={item.id}>
+              {filteredOrders.map((order) => (
+                <tr key={order.id}>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm font-medium text-gray-900">{item.name}</div>
+                    <div className="text-sm font-medium text-gray-900">{order.id}</div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm text-gray-500">{item.category}</div>
+                    <div className="text-sm text-gray-500">{order.supplier}</div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm text-gray-500">{item.sku}</div>
+                    <div className="text-sm text-gray-500">{order.date}</div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm text-gray-500">{item.quantity}</div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm text-gray-500">${item.price.toFixed(2)}</div>
+                    <div className="text-sm text-gray-500">${order.total.toFixed(2)}</div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <span
                       className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                        item.status === "Low Stock" ? "bg-yellow-100 text-yellow-800" : "bg-green-100 text-green-800"
+                        order.status === "Delivered"
+                          ? "bg-green-100 text-green-800"
+                          : order.status === "Processing"
+                            ? "bg-blue-100 text-blue-800"
+                            : "bg-yellow-100 text-yellow-800"
                       }`}
                     >
-                      {item.status}
+                      {order.status}
                     </span>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                    <Link href={`/inventory/${item.id}`} className="text-blue-600 hover:text-blue-900 mr-4">
+                    <Link href={`/orders/${order.id}`} className="text-blue-600 hover:text-blue-900 mr-4">
                       View
                     </Link>
-                    <Link href={`/inventory/${item.id}/edit`} className="text-blue-600 hover:text-blue-900">
+                    <Link href={`/orders/${order.id}/edit`} className="text-blue-600 hover:text-blue-900">
                       Edit
                     </Link>
                   </td>

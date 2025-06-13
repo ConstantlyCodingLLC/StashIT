@@ -1,47 +1,58 @@
-const { sql } = require("@vercel/postgres")
+const { Pool } = require("pg")
 const fs = require("fs")
 const path = require("path")
 
 async function setupDatabase() {
   try {
-    console.log("Setting up database...")
+    // Get database connection string from environment variables
+    const connectionString = process.env.DATABASE_URL || process.env.POSTGRES_URL
 
-    // Read the schema SQL file
-    const schemaPath = path.join(__dirname, "schema.sql")
-    const schemaSql = fs.readFileSync(schemaPath, "utf8")
-
-    // Split the SQL into individual statements
-    const statements = schemaSql.split(";").filter((statement) => statement.trim() !== "")
-
-    // Execute each statement
-    for (const statement of statements) {
-      try {
-        await sql.query(statement)
-      } catch (error) {
-        console.error(`Error executing statement: ${statement}`)
-        console.error(error)
-        // Continue with other statements
-      }
+    if (!connectionString) {
+      console.error(
+        "Database connection string not found. Please set DATABASE_URL or POSTGRES_URL environment variable.",
+      )
+      process.exit(1)
     }
 
-    console.log("Database schema created successfully")
+    // Create a new database connection
+    const pool = new Pool({
+      connectionString,
+      ssl: process.env.NODE_ENV === "production" ? { rejectUnauthorized: false } : false,
+    })
+
+    // Read the SQL setup script
+    const sqlScript = fs.readFileSync(path.join(__dirname, "setup-database.sql"), "utf8")
+
+    // Execute the SQL script
+    await pool.query(sqlScript)
+
+    console.log("Database setup completed successfully!")
+
+    // Close the database connection
+    await pool.end()
+
+    return true
   } catch (error) {
     console.error("Error setting up database:", error)
-    throw error
+    return false
   }
 }
 
-// Run the setup function if this script is executed directly
+// Execute the setup function if this script is run directly
 if (require.main === module) {
   setupDatabase()
-    .then(() => {
-      console.log("Setup completed")
-      process.exit(0)
+    .then((success) => {
+      if (success) {
+        console.log("Database setup completed.")
+      } else {
+        console.error("Database setup failed.")
+        process.exit(1)
+      }
     })
     .catch((error) => {
-      console.error("Setup failed:", error)
+      console.error("Unexpected error:", error)
       process.exit(1)
     })
 }
 
-module.exports = setupDatabase
+module.exports = { setupDatabase }
