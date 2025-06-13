@@ -10,23 +10,28 @@ export async function middleware(request: NextRequest) {
   const isPublicPath = publicPaths.some((path) => pathname.startsWith(path))
 
   // Check if the user is authenticated
-  const token = await getToken({
-    req: request,
-    secret: process.env.NEXTAUTH_SECRET,
-  })
-  const isAuthenticated = !!token
+  try {
+    const token = await getToken({
+      req: request,
+      secret: process.env.NEXTAUTH_SECRET || "fallback-secret-do-not-use-in-production",
+    })
+    const isAuthenticated = !!token
 
-  // Redirect logic
-  if (!isAuthenticated && !isPublicPath) {
-    // Redirect to login if trying to access protected route without authentication
-    const url = new URL("/login", request.url)
-    url.searchParams.set("callbackUrl", encodeURI(request.url))
-    return NextResponse.redirect(url)
-  }
+    // Redirect logic
+    if (!isAuthenticated && !isPublicPath && pathname !== "/") {
+      // Redirect to login if trying to access protected route without authentication
+      const url = new URL("/login", request.url)
+      url.searchParams.set("callbackUrl", encodeURI(request.url))
+      return NextResponse.redirect(url)
+    }
 
-  if (isAuthenticated && isPublicPath) {
-    // Redirect to dashboard if trying to access public route while authenticated
-    return NextResponse.redirect(new URL("/dashboard", request.url))
+    if (isAuthenticated && isPublicPath) {
+      // Redirect to dashboard if trying to access public route while authenticated
+      return NextResponse.redirect(new URL("/dashboard", request.url))
+    }
+  } catch (error) {
+    console.error("Middleware error:", error)
+    // In case of error, allow the request to proceed
   }
 
   return NextResponse.next()
