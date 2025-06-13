@@ -1,0 +1,246 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// Multi-tenant business model
+model Business {
+  id                String              @id @default(cuid())
+  name              String
+  businessType      String
+  address           String?
+  phone             String?
+  email             String?
+  taxRate           Float               @default(0)
+  currency          String              @default("USD")
+  fiscalYearStart   String              @default("jan")
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+  users             User[]
+  inventoryItems    InventoryItem[]
+  categories        Category[]
+  suppliers         Supplier[]
+  purchaseOrders    PurchaseOrder[]
+  invoices          Invoice[]
+  devices           Device[]
+  transactions      Transaction[]
+  auditLogs         AuditLog[]
+  settings          BusinessSettings?
+}
+
+model BusinessSettings {
+  id                String    @id @default(cuid())
+  lowStockAlerts    Boolean   @default(true)
+  autoOrderSuggestions Boolean @default(true)
+  lowStockThreshold Int       @default(10)
+  businessId        String    @unique
+  business          Business  @relation(fields: [businessId], references: [id], onDelete: Cascade)
+}
+
+model User {
+  id                String    @id @default(cuid())
+  name              String
+  email             String
+  password          String // Hashed password
+  role              String    @default("user") // admin, manager, user
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  businessId        String
+  business          Business  @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  auditLogs         AuditLog[]
+  transactions      Transaction[]
+
+  @@unique([email, businessId])
+}
+
+model Category {
+  id                String    @id @default(cuid())
+  name              String
+  description       String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  businessId        String
+  business          Business  @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  inventoryItems    InventoryItem[]
+
+  @@unique([name, businessId])
+}
+
+model InventoryItem {
+  id                String    @id @default(cuid())
+  name              String
+  sku               String
+  description       String?
+  quantity          Int       @default(0)
+  minQuantity       Int       @default(0)
+  costPrice         Float?
+  sellingPrice      Float?
+  location          String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  businessId        String
+  business          Business  @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  categoryId        String?
+  category          Category? @relation(fields: [categoryId], references: [id])
+  supplierId        String?
+  supplier          Supplier? @relation(fields: [supplierId], references: [id])
+  transactions      Transaction[]
+  purchaseOrderItems PurchaseOrderItem[]
+  invoiceItems      InvoiceItem[]
+
+  @@unique([sku, businessId])
+}
+
+model Supplier {
+  id                String    @id @default(cuid())
+  name              String
+  contactName       String?
+  contactTitle      String?
+  email             String?
+  phone             String?
+  address           String?
+  website           String?
+  taxId             String?
+  paymentTerms      String?
+  notes             String?
+  status            String    @default("active") // active, onhold, inactive
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  businessId        String
+  business          Business  @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  inventoryItems    InventoryItem[]
+  purchaseOrders    PurchaseOrder[]
+
+  @@unique([name, businessId])
+}
+
+model Device {
+  id                String    @id @default(cuid())
+  name              String
+  deviceType        String
+  manufacturer      String?
+  model             String?
+  serialNumber      String?
+  sku               String?
+  purchaseDate      DateTime?
+  warrantyExpiry    DateTime?
+  assignedTo        String?
+  status            String    @default("available") // available, deployed, repair, retired
+  notes             String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  businessId        String
+  business          Business  @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  transactions      Transaction[]
+
+  @@unique([serialNumber, businessId])
+}
+
+model Transaction {
+  id                String    @id @default(cuid())
+  type              String    // receive, deploy
+  quantity          Int
+  notes             String?
+  createdAt         DateTime  @default(now())
+  businessId        String
+  business          Business  @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  userId            String
+  user              User      @relation(fields: [userId], references: [id])
+  itemId            String?
+  item              InventoryItem? @relation(fields: [itemId], references: [id])
+  deviceId          String?
+  device            Device?   @relation(fields: [deviceId], references: [id])
+  purchaseOrderId   String?
+  purchaseOrder     PurchaseOrder? @relation(fields: [purchaseOrderId], references: [id])
+}
+
+model PurchaseOrder {
+  id                String    @id @default(cuid())
+  poNumber          String
+  date              DateTime
+  expectedDelivery  DateTime?
+  paymentTerms      String?
+  shippingAddress   String?
+  notes             String?
+  status            String    @default("draft") // draft, sent, partial, received, cancelled
+  subtotal          Float
+  tax               Float
+  total             Float
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  businessId        String
+  business          Business  @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  supplierId        String
+  supplier          Supplier  @relation(fields: [supplierId], references: [id])
+  items             PurchaseOrderItem[]
+  transactions      Transaction[]
+
+  @@unique([poNumber, businessId])
+}
+
+model PurchaseOrderItem {
+  id                String    @id @default(cuid())
+  quantity          Int
+  unitPrice         Float
+  total             Float
+  description       String?
+  purchaseOrderId   String
+  purchaseOrder     PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  itemId            String
+  item              InventoryItem @relation(fields: [itemId], references: [id])
+}
+
+model Invoice {
+  id                String    @id @default(cuid())
+  invoiceNumber     String
+  customerName      String
+  date              DateTime
+  dueDate           DateTime
+  status            String    @default("draft") // draft, sent, paid, overdue, cancelled
+  subtotal          Float
+  tax               Float
+  total             Float
+  notes             String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  businessId        String
+  business          Business  @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  items             InvoiceItem[]
+
+  @@unique([invoiceNumber, businessId])
+}
+
+model InvoiceItem {
+  id                String    @id @default(cuid())
+  quantity          Int
+  unitPrice         Float
+  total             Float
+  description       String?
+  invoiceId         String
+  invoice           Invoice   @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  itemId            String
+  item              InventoryItem @relation(fields: [itemId], references: [id])
+}
+
+model AuditLog {
+  id                String    @id @default(cuid())
+  action            String    // created, updated, deleted, received, deployed
+  itemType          String    // inventory, device, supplier, etc.
+  itemId            String
+  details           String?   // JSON string with details
+  ipAddress         String?
+  deviceInfo        String?
+  createdAt         DateTime  @default(now())
+  businessId        String
+  business          Business  @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  userId            String
+  user              User      @relation(fields: [userId], references: [id])
+}
