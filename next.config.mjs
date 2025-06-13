@@ -7,9 +7,8 @@ const nextConfig = {
     ignoreBuildErrors: true,
   },
   images: {
-    unoptimized: true,
+    domains: ['blob.v0.dev'],
   },
-  // Add output: 'standalone' for better Vercel compatibility
   output: 'standalone',
 }
 
