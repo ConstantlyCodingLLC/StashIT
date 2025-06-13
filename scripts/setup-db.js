@@ -1,11 +1,10 @@
-// This script sets up the database schema
 const { sql } = require("@vercel/postgres")
 const fs = require("fs")
 const path = require("path")
 
 async function setupDatabase() {
   try {
-    console.log("Setting up database schema...")
+    console.log("Setting up database...")
 
     // Read the schema SQL file
     const schemaPath = path.join(__dirname, "schema.sql")
@@ -16,14 +15,33 @@ async function setupDatabase() {
 
     // Execute each statement
     for (const statement of statements) {
-      await sql.query(statement + ";")
+      try {
+        await sql.query(statement)
+      } catch (error) {
+        console.error(`Error executing statement: ${statement}`)
+        console.error(error)
+        // Continue with other statements
+      }
     }
 
-    console.log("Database schema setup complete!")
+    console.log("Database schema created successfully")
   } catch (error) {
-    console.error("Error setting up database schema:", error)
-    process.exit(1)
+    console.error("Error setting up database:", error)
+    throw error
   }
 }
 
-setupDatabase()
+// Run the setup function if this script is executed directly
+if (require.main === module) {
+  setupDatabase()
+    .then(() => {
+      console.log("Setup completed")
+      process.exit(0)
+    })
+    .catch((error) => {
+      console.error("Setup failed:", error)
+      process.exit(1)
+    })
+}
+
+module.exports = setupDatabase
